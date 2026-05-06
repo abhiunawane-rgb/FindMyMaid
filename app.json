@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "FindMyMaid",
+    "slug": "FindMyMaid",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF9E6"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.findmymaid.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "FindMyMaid uses your location to sort helpers by distance and to set your service area when you create a helper profile.",
+        "NSPhotoLibraryUsageDescription": "Choose a clear photo for your helper profile.",
+        "NSCameraUsageDescription": "Take a photo for your helper profile."
+      }
+    },
+    "android": {
+      "package": "com.findmymaid.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF9E6"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FindMyMaid to select your profile photo.",
+          "cameraPermission": "Allow FindMyMaid to take your profile photo."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FindMyMaid uses your location to show nearby helpers and to place your helper profile when you sign up."
+        }
+      ]
+    ]
+  }
+}

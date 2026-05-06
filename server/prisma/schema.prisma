@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per phone + role (same person can have maid + family as two rows if they use both).
+model AppUser {
+  id         String   @id @default(uuid())
+  phoneNorm  String
+  role       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  maidListing MaidListing?
+
+  @@unique([phoneNorm, role])
+  @@map("app_user")
+}
+
+model MaidListing {
+  id          String   @id
+  userId      String   @unique
+  user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  phone       String
+  gender      String
+  photoUrl    String?
+  ratesM30    Int
+  ratesH1     Int
+  ratesH2     Int
+  servicesJson String
+  lat         Float?
+  lng         Float?
+  verified    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@map("maid_listing")
+}

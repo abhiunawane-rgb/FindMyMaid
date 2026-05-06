@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FindMyMaid — Publish priority (iOS + Android)</title>
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --muted: #444;
+        --border: #ccc;
+        --accent: #b8860b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: var(--ink);
+        line-height: 1.45;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 24px 20px 48px;
+        font-size: 11pt;
+      }
+      h1 {
+        font-size: 1.35rem;
+        margin: 0 0 8px;
+        border-bottom: 3px solid var(--accent);
+        padding-bottom: 10px;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0 0 24px;
+      }
+      h2 {
+        font-size: 1.05rem;
+        margin: 28px 0 12px;
+        color: var(--ink);
+      }
+      .callout {
+        background: #f8f6f0;
+        border-left: 4px solid var(--accent);
+        padding: 10px 14px;
+        margin: 16px 0;
+        font-size: 0.95rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 20px;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f0f0f0;
+        font-weight: 700;
+      }
+      tr:nth-child(even) td {
+        background: #fafafa;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+        font-size: 0.85em;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 12px 14px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 0.8rem;
+      }
+      ul.steps {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      ul.steps li {
+        margin-bottom: 6px;
+      }
+      .footer-note {
+        margin-top: 32px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      @media print {
+        body {
+          padding: 12px;
+          max-width: none;
+        }
+        h2 {
+          break-after: avoid;
+        }
+        table {
+          break-inside: avoid;
+        }
+        .callout {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>FindMyMaid — Publish priority (iOS + Android)</h1>
+    <p class="meta">
+      <strong>App IDs:</strong> iOS bundle &amp; Android package <code>com.findmymaid.app</code><br />
+      <strong>Website:</strong> https://www.findmymaid.online<br />
+      <strong>Print to PDF:</strong> Use <kbd>Ctrl</kbd>+<kbd>P</kbd> → choose “Save as PDF” or “Microsoft Print to PDF”.
+    </p>
+
+    <h2>Tier 1 — Must do first (nothing ships without these)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>What</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><strong>Paid accounts</strong> — Apple Developer Program + Google Play Console</td>
+          <td>Both stores require enrolment before you can submit.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>Expo / EAS</strong> — <code>eas login</code>, link project (<code>eas init</code> or first <code>eas build</code>), confirm <code>eas whoami</code></td>
+          <td>Release builds go through EAS from Windows or any OS.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><strong>Public backend</strong> — HTTPS API, <code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>prisma migrate deploy</code>, Twilio <code>TWILIO_*</code> live, <strong>no OTP_DEV_BYPASS</strong> in prod</td>
+          <td>Real SMS OTP and sync; LAN-only is not enough for store apps.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Set <code>EXPO_PUBLIC_API_URL</code> on EAS <strong>production</strong></td>
+          <td>Store builds will not reach your API without this.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="callout"><strong>Until Tier 1 is done, “publish” isn’t real.</strong></p>
+
+    <h2>Tier 2 — Required to submit to each store</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>What</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>5</td>
+          <td><code>eas build --platform android --profile production</code> (AAB) and iOS production build</td>
+          <td>Store-ready binaries.</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td><strong>Play Console</strong> — app, package ID, privacy URL, listings, Data safety, rating, internal test</td>
+          <td>Android gate.</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td><strong>App Store Connect</strong> — app, bundle ID, privacy URL, encryption, screenshots, App Privacy</td>
+          <td>iOS gate.</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td><code>eas submit -p android</code> / <code>eas submit -p ios</code> (or manual upload)</td>
+          <td>Upload to Play / TestFlight / review.</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td><strong>Reviewer notes</strong> — phone + real SMS OTP (Twilio)</td>
+          <td>Reviewers must complete sign-in.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Tier 3 — Strongly recommended before “production”</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>What</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>10</td>
+          <td>Website live (privacy, terms, support, pricing, contact)</td>
+          <td>Policy URLs; avoid 404s.</td>
+        </tr>
+        <tr>
+          <td>11</td>
+          <td>Subscriptions: real IAP or hide scope (see <code>docs/STORE_MONETIZATION.md</code>)</td>
+          <td>Demo billing may confuse review.</td>
+        </tr>
+        <tr>
+          <td>12</td>
+          <td>End-to-end device test — both roles, OTP, Find + API</td>
+          <td>Catch URL / TLS / Twilio early.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Tier 4 — Quality (can follow v1)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>What</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>13</td>
+          <td>Profile photos via HTTPS URLs</td>
+          <td><code>file://</code> won’t work on other devices.</td>
+        </tr>
+        <tr>
+          <td>14</td>
+          <td>Trim “Demo” UI copy if claiming production</td>
+          <td>Cleaner review story.</td>
+        </tr>
+        <tr>
+          <td>15</td>
+          <td>Bump version / build per release</td>
+          <td>Store hygiene.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>One-line order of attack</h2>
+    <p class="callout">
+      Accounts → EAS login + project → deploy API + Twilio + prod env → <code>EXPO_PUBLIC_API_URL</code> → production EAS
+      builds → Play + App Store Connect → internal testing → submit + reviewer OTP notes → Tier 3–4.
+    </p>
+
+    <h2>Quick commands (project folder)</h2>
+    <pre>eas login
+eas whoami
+eas build --platform android --profile production
+eas build --platform ios --profile production
+eas submit -p android
+eas submit -p ios</pre>
+
+    <h2>Full printable checklist</h2>
+    <p>Also open <strong>APP_PUBLISH_CHECKLIST.md</strong> in this folder and print to PDF if you want the long form.</p>
+
+    <p class="footer-note">Expo SDK 54 · April 2026 · Find My Maid</p>
+  </body>
+</html>
