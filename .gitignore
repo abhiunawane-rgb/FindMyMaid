@@ -42,3 +42,17 @@ server/dist/
 # generated native folders
 /ios
 /android
+
+# build artifacts (Play / App Store binaries)
+*.aab
+*.apk
+*.ipa
+application-*.aab
+build-log*.txt
+fresh-build.json
+
+# store assets workspace (icons, screenshots, marketing zips)
+AppIcons*/
+AppIcons*.zip
+Screenshots/
+website/website.zip

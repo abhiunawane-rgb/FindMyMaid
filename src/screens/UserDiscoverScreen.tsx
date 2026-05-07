@@ -52,7 +52,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 /** Cheerful maid mascot — black background matches artwork for seamless crop. */
-const HOME_HERO_MAID = require('../../assets/home-hero-maid.png');
+const HOME_HERO_MAID = require('../../assets/home-hero-maid.jpg');
 
 /** Location strip below the nav header (not inside the header bar). */
 function CurrentLocationCard({

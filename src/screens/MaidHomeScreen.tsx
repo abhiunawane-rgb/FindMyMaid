@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext';
 import { SERVICE_LABELS } from '../types';
 import { colors, radius, shadows, spacing, touchMin, typography } from '../theme';
 
-const HOME_HERO_MAID = require('../../assets/home-hero-maid.png');
+const HOME_HERO_MAID = require('../../assets/home-hero-maid.jpg');
 
 export function MaidHomeScreen() {
   const { state, isMaidPro, getLeadCount, FREE_LEADS_PER_MONTH } = useApp();

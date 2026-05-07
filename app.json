@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.findmymaid.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFF9E6"
@@ -54,6 +55,13 @@
           "locationWhenInUsePermission": "FindMyMaid uses your location to show nearby helpers and to place your helper profile when you sign up."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "apiUrl": "",
+      "eas": {
+        "projectId": "deab0841-19bd-4970-a90f-5b647cff53d9"
+      }
+    },
+    "owner": "abhinandangame"
   }
 }
