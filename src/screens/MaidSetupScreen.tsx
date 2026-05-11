@@ -1,21 +1,13 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import {
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthBackRow } from '../components/AuthBackRow';
 import { BrandLogo } from '../components/BrandLogo';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
-import { UI_CURRENCY_SYMBOL } from '../constants/localeDisplay';
+import { CURRENCY_CONFIG } from '../constants/localeDisplay';
 import { useApp } from '../context/AppContext';
 import { maidIdFromPhone } from '../utils/maidId';
 import type { Gender, MaidOwnProfile, ServiceId } from '../types';
@@ -32,12 +24,20 @@ const ALL_SERVICES: ServiceId[] = [
 
 export function MaidSetupScreen() {
   const { state, saveMaidProfile, backFromSetup } = useApp();
+  const [displayNameDraft, setDisplayNameDraft] = useState(state.displayName.trim());
   const [step, setStep] = useState(0);
   const [gender, setGender] = useState<Gender>('female');
+
+  useEffect(() => {
+    const d = state.displayName.trim();
+    if (d.length >= 2) setDisplayNameDraft(d);
+  }, [state.displayName]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [age, setAge] = useState('30');
   const [m30, setM30] = useState('200');
   const [h1, setH1] = useState('350');
   const [h2, setH2] = useState('600');
+  const [h24, setH24] = useState('5200');
   const [picked, setPicked] = useState<Set<ServiceId>>(new Set(['house_cleaning']));
   const [saving, setSaving] = useState(false);
 
@@ -68,16 +68,32 @@ export function MaidSetupScreen() {
   };
 
   const next = () => {
-    if (step === 0 && !photoUri) {
-      Alert.alert('Photo', 'Add one clear indoor photo so families recognize you.');
-      return;
+    if (step === 0) {
+      const n = displayNameDraft.trim();
+      if (n.length < 2) {
+        Alert.alert('Your name', 'Enter how you’d like families to address you (at least 2 characters).');
+        return;
+      }
+      if (!photoUri) {
+        Alert.alert('Photo', 'Add one clear profile picture so families recognize you.');
+        return;
+      }
+      const ageNum = Number(age);
+      if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 80) {
+        Alert.alert('Age', 'Enter your age (18 to 80).');
+        return;
+      }
     }
     if (step === 1) {
       const a = Number(m30);
       const b = Number(h1);
       const c = Number(h2);
-      if (![a, b, c].every((n) => n > 0 && n < 100000)) {
-        Alert.alert('Rates', 'Enter fair amounts for 30 min, 1 hour, and 2 hours.');
+      const d = Number(h24);
+      if (![a, b, c, d].every((n) => n > 0 && n < 10000000)) {
+        Alert.alert(
+          'Rates',
+          'Enter fair amounts for 30 min, 1 hour, 2 hours, and a full-day (24 hour) rate.'
+        );
         return;
       }
     }
@@ -120,14 +136,16 @@ export function MaidSetupScreen() {
 
     const profile: MaidOwnProfile = {
       id: maidIdFromPhone(state.phone),
-      displayName: state.displayName,
+      displayName: displayNameDraft.trim(),
       phone: state.phone,
       gender,
+      age: Number(age),
       photoUri,
       rates: {
         m30: Number(m30),
         h1: Number(h1),
         h2: Number(h2),
+        h24: Number(h24),
       },
       services: Array.from(picked),
       verified: true,
@@ -172,6 +190,16 @@ export function MaidSetupScreen() {
 
       {step === 0 && (
         <View>
+          <Text style={styles.label}>Name families will see</Text>
+          <TextInput
+            value={displayNameDraft}
+            onChangeText={setDisplayNameDraft}
+            placeholder="e.g. Sunita K."
+            placeholderTextColor={colors.textSecondary}
+            style={styles.input}
+            autoCapitalize="words"
+            accessibilityLabel="Display name"
+          />
           <Text style={styles.label}>You are</Text>
           <View style={styles.genderRow}>
             <Pressable
@@ -213,15 +241,29 @@ export function MaidSetupScreen() {
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} />
             ) : (
-              <Text style={styles.photoPlaceholder}>Tap to add indoor photo</Text>
+              <Text style={styles.photoPlaceholder}>Tap to add profile picture</Text>
             )}
           </Pressable>
+
+          <Text style={styles.label}>Age</Text>
+          <TextInput
+            value={age}
+            onChangeText={setAge}
+            placeholder="e.g. 30"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="number-pad"
+            style={styles.input}
+            accessibilityLabel="Age"
+          />
+
         </View>
       )}
 
       {step === 1 && (
         <View>
-          <Text style={styles.label}>30 minutes ({UI_CURRENCY_SYMBOL})</Text>
+          <Text style={styles.label}>
+            30 minutes ({CURRENCY_CONFIG[state.pricingCountry].currencyCode})
+          </Text>
           <TextInput
             value={m30}
             onChangeText={setM30}
@@ -229,19 +271,28 @@ export function MaidSetupScreen() {
             style={styles.input}
             accessibilityLabel="Rate for 30 minutes"
           />
-          <Text style={styles.label}>1 hour ({UI_CURRENCY_SYMBOL})</Text>
+          <Text style={styles.label}>1 hour ({CURRENCY_CONFIG[state.pricingCountry].currencyCode})</Text>
           <TextInput
             value={h1}
             onChangeText={setH1}
             keyboardType="number-pad"
             style={styles.input}
           />
-          <Text style={styles.label}>2 hours ({UI_CURRENCY_SYMBOL})</Text>
+          <Text style={styles.label}>2 hours ({CURRENCY_CONFIG[state.pricingCountry].currencyCode})</Text>
           <TextInput
             value={h2}
             onChangeText={setH2}
             keyboardType="number-pad"
             style={styles.input}
+          />
+          <Text style={styles.label}>24 hours — full day ({CURRENCY_CONFIG[state.pricingCountry].currencyCode})</Text>
+          <Text style={styles.captionHint}>Your packaged day rate — families compare this like your hourly slots.</Text>
+          <TextInput
+            value={h24}
+            onChangeText={setH24}
+            keyboardType="number-pad"
+            style={styles.input}
+            accessibilityLabel="Rate for twenty-four hours"
           />
         </View>
       )}
@@ -360,6 +411,13 @@ const styles = StyleSheet.create({
   genderLabelOn: {
     color: colors.primaryDark,
     fontWeight: '600',
+  },
+  captionHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: -4,
+    marginBottom: spacing.xs,
+    lineHeight: 18,
   },
   label: {
     ...typography.small,

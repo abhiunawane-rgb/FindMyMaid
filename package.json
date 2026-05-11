@@ -11,7 +11,9 @@
     "api:migrate": "npm run db:deploy --prefix server",
     "api:dev": "npm run dev --prefix server",
     "build:testing:android": "eas build --profile testing --platform android",
-    "build:testing:ios": "eas build --profile testing --platform ios"
+    "build:testing:ios": "eas build --profile testing --platform ios",
+    "build:production": "eas build --profile production --platform all",
+    "submit:stores": "eas submit -p ios --profile production --latest && eas submit -p android --profile production --latest"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

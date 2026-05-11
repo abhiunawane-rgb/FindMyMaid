@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// One row per phone + role (same person can have maid + family as two rows if they use both).
+/// One row per phone number (a number can only be one account type).
 model AppUser {
   id         String   @id @default(uuid())
   phoneNorm  String
@@ -17,7 +17,7 @@ model AppUser {
 
   maidListing MaidListing?
 
-  @@unique([phoneNorm, role])
+  @@unique([phoneNorm])
   @@map("app_user")
 }
 
@@ -28,15 +28,36 @@ model MaidListing {
   displayName String
   phone       String
   gender      String
+  age         Int     @default(18)
   photoUrl    String?
   ratesM30    Int
   ratesH1     Int
   ratesH2     Int
+  ratesH24    Int
   servicesJson String
   lat         Float?
   lng         Float?
   verified    Boolean  @default(true)
   updatedAt   DateTime @updatedAt
 
+  reviews MaidReview[]
+
   @@map("maid_listing")
+}
+
+/// Families rate helpers — one row per reviewer per listing (upsert updates).
+model MaidReview {
+  id                 String   @id @default(uuid())
+  maidListingId      String
+  maidListing        MaidListing @relation(fields: [maidListingId], references: [id], onDelete: Cascade)
+  reviewerUserId    String
+  authorDisplayName String   @db.VarChar(120)
+  authorPhotoUri    String?  @db.VarChar(2048)
+  rating            Int
+  comment           String   @db.VarChar(2000)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([maidListingId, reviewerUserId])
+  @@map("maid_review")
 }

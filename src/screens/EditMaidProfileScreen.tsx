@@ -2,17 +2,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
+import { CURRENCY_CONFIG } from '../constants/localeDisplay';
 import { useApp } from '../context/AppContext';
 import type { MaidStackParamList } from '../navigation/types';
 import { colors, radius, spacing, touchMin, typography } from '../theme';
@@ -25,11 +18,21 @@ export function EditMaidProfileScreen({ navigation }: Props) {
 
   const [displayName, setDisplayName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [age, setAge] = useState('30');
+  const [m30, setM30] = useState('200');
+  const [h1, setH1] = useState('350');
+  const [h2, setH2] = useState('600');
+  const [h24, setH24] = useState('5200');
 
   useEffect(() => {
     if (!profile) return;
     setDisplayName(profile.displayName ?? '');
     setPhotoUri(profile.photoUri ?? null);
+    setAge(String(profile.age ?? 30));
+    setM30(String(profile.rates.m30));
+    setH1(String(profile.rates.h1));
+    setH2(String(profile.rates.h2));
+    setH24(String(profile.rates.h24));
   }, [profile]);
 
   const pickPhoto = async () => {
@@ -49,11 +52,29 @@ export function EditMaidProfileScreen({ navigation }: Props) {
 
   const onSave = () => {
     const name = displayName.trim();
+    const ageNum = Number(age);
     if (name.length < 1) {
       Alert.alert('Name required', 'Please enter how you want families to see your name.');
       return;
     }
-    updateMaidProfile({ displayName: name, photoUri });
+    if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 80) {
+      Alert.alert('Age required', 'Enter your age between 18 and 80.');
+      return;
+    }
+    const r30 = Number(m30);
+    const r1 = Number(h1);
+    const r2 = Number(h2);
+    const r24 = Number(h24);
+    if (![r30, r1, r2, r24].every((n) => Number.isFinite(n) && n > 0 && n < 10000000)) {
+      Alert.alert('Rates', 'Enter valid amounts for 30 min, 1 hr, 2 hr, and 24 hr.');
+      return;
+    }
+    updateMaidProfile({
+      displayName: name,
+      photoUri,
+      age: Math.round(ageNum),
+      rates: { m30: r30, h1: r1, h2: r2, h24: r24 },
+    });
     navigation.goBack();
   };
 
@@ -68,7 +89,7 @@ export function EditMaidProfileScreen({ navigation }: Props) {
   return (
     <Screen scroll>
       <Text style={styles.title}>Edit profile</Text>
-      <Text style={styles.sub}>Update your name and photo. Mobile number cannot be changed.</Text>
+      <Text style={styles.sub}>Update your profile picture and details. Mobile number cannot be changed.</Text>
 
       <Pressable
         onPress={pickPhoto}
@@ -95,6 +116,50 @@ export function EditMaidProfileScreen({ navigation }: Props) {
         style={styles.input}
         autoCapitalize="words"
         accessibilityLabel="Display name"
+      />
+
+      <Text style={styles.label}>Age</Text>
+      <TextInput
+        value={age}
+        onChangeText={setAge}
+        placeholder="e.g. 30"
+        placeholderTextColor={colors.textSecondary}
+        style={styles.input}
+        keyboardType="number-pad"
+        accessibilityLabel="Age"
+      />
+
+      <Text style={styles.ratesHeading}>Your rates ({CURRENCY_CONFIG[state.pricingCountry].currencyCode})</Text>
+
+      <Text style={styles.label}>30 minutes</Text>
+      <TextInput
+        value={m30}
+        onChangeText={setM30}
+        keyboardType="number-pad"
+        style={styles.input}
+        accessibilityLabel="Rate for thirty minutes"
+      />
+      <Text style={styles.label}>1 hour</Text>
+      <TextInput
+        value={h1}
+        onChangeText={setH1}
+        keyboardType="number-pad"
+        style={styles.input}
+      />
+      <Text style={styles.label}>2 hours</Text>
+      <TextInput
+        value={h2}
+        onChangeText={setH2}
+        keyboardType="number-pad"
+        style={styles.input}
+      />
+      <Text style={styles.label}>24 hours — full day</Text>
+      <TextInput
+        value={h24}
+        onChangeText={setH24}
+        keyboardType="number-pad"
+        style={styles.input}
+        accessibilityLabel="Rate for twenty-four hours"
       />
 
       <Text style={styles.label}>Mobile number</Text>
@@ -177,6 +242,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 4,
+  },
+  ratesHeading: {
+    ...typography.bodyMedium,
+    color: colors.text,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   saveBtn: { marginTop: spacing.sm },
   cancelWrap: { alignItems: 'center', paddingVertical: spacing.md },

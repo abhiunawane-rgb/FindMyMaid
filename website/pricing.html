@@ -6,7 +6,7 @@
     <title>Plans &amp; pricing — Find My Maid</title>
     <meta
       name="description"
-      content="Find My Maid plans in Indian Rupees: what’s free for families and helpers, and optional Premium and Maid Pro subscriptions via the App Store and Google Play."
+      content="Find My Maid plans with global currency preview: free limits, Premium for families, and Maid Pro for helpers."
     />
     <meta name="theme-color" content="#141414" />
     <link rel="stylesheet" href="css/site.css" />
@@ -46,9 +46,8 @@
           below. <strong>Premium</strong> (for families) and <strong>Maid Pro</strong> (for helpers) are optional upgrades
           you buy inside the app through Apple or Google.
         </p>
-        <p class="pricing-note">
-          The numbers here are in <strong>Indian Rupees (₹)</strong> as a guide. When you subscribe in the app, the store
-          always shows the <strong>exact price and tax</strong> before you confirm payment.
+        <p class="pricing-note" id="pricing-note-live">
+          The numbers here are shown in <strong>INR</strong> as a guide. At checkout, App Store and Google Play show exact local tax and final billing.
         </p>
       </header>
 
@@ -77,6 +76,27 @@
         </div>
       </section>
 
+      <section class="pricing-section pricing-section--currency" aria-labelledby="billing-region-heading">
+        <h2 id="billing-region-heading" class="pricing-section-title">Currency & billing region</h2>
+        <p class="pricing-section-desc">
+          Choose how estimates look on this page. The app Premium screen has the same control. Stores still bill in your
+          locale at checkout.
+        </p>
+        <div class="currency-switch pricing-currency-band">
+          <label for="pricing-country"><strong>Country / currency:</strong></label>
+          <select id="pricing-country" aria-label="Select pricing country">
+            <option value="IN">India (INR)</option>
+            <option value="US">United States (USD)</option>
+            <option value="GB">United Kingdom (GBP)</option>
+            <option value="EU">Europe (EUR)</option>
+            <option value="AE">UAE (AED)</option>
+            <option value="CA">Canada (CAD)</option>
+            <option value="AU">Australia (AUD)</option>
+            <option value="SG">Singapore (SGD)</option>
+          </select>
+        </div>
+      </section>
+
       <section class="pricing-section" aria-labelledby="plans-heading">
         <h2 id="plans-heading" class="pricing-section-title">Optional subscriptions</h2>
         <p class="pricing-section-desc">Choose exactly what you prefer inside the app — monthly or yearly.</p>
@@ -92,11 +112,11 @@
             </ul>
             <div class="plan-card__options">
               <div class="plan-price-block">
-                <span class="plan-price">₹199</span>
+                <span class="plan-price" data-inr="199">Rs 199</span>
                 <span class="plan-price-meta">per month</span>
               </div>
               <div class="plan-price-block plan-price-block--alt">
-                <span class="plan-price">₹1,499</span>
+                <span class="plan-price" data-inr="1499">Rs 1499</span>
                 <span class="plan-price-meta">per year — saves vs paying monthly</span>
               </div>
             </div>
@@ -112,11 +132,11 @@
             </ul>
             <div class="plan-card__options">
               <div class="plan-price-block">
-                <span class="plan-price">₹299</span>
+                <span class="plan-price" data-inr="299">Rs 299</span>
                 <span class="plan-price-meta">per month</span>
               </div>
               <div class="plan-price-block plan-price-block--alt">
-                <span class="plan-price">₹2,299</span>
+                <span class="plan-price" data-inr="2299">Rs 2299</span>
                 <span class="plan-price-meta">per year — lower than twelve months at the monthly rate</span>
               </div>
             </div>
@@ -172,5 +192,40 @@
       </div>
       <p class="footer-meta">© 2026 Find My Maid. All rights reserved.</p>
     </footer>
+    <script>
+      (function () {
+        const config = {
+          IN: { code: 'INR', symbol: 'Rs ', rate: 1, label: 'India' },
+          US: { code: 'USD', symbol: '$', rate: 0.012, label: 'United States' },
+          GB: { code: 'GBP', symbol: 'GBP ', rate: 0.0095, label: 'United Kingdom' },
+          EU: { code: 'EUR', symbol: 'EUR ', rate: 0.011, label: 'Europe' },
+          AE: { code: 'AED', symbol: 'AED ', rate: 0.044, label: 'UAE' },
+          CA: { code: 'CAD', symbol: 'CAD ', rate: 0.017, label: 'Canada' },
+          AU: { code: 'AUD', symbol: 'AUD ', rate: 0.018, label: 'Australia' },
+          SG: { code: 'SGD', symbol: 'SGD ', rate: 0.016, label: 'Singapore' },
+        };
+        const select = document.getElementById('pricing-country');
+        const priceNodes = document.querySelectorAll('[data-inr]');
+        const note = document.getElementById('pricing-note-live');
+        if (!select || !note) return;
+        const render = () => {
+          const key = select.value in config ? select.value : 'IN';
+          const cfg = config[key];
+          priceNodes.forEach((node) => {
+            const inr = Number(node.getAttribute('data-inr') || '0');
+            const converted = Math.max(0, Math.round(inr * cfg.rate));
+            node.textContent = cfg.symbol + converted;
+          });
+          note.innerHTML =
+            'The numbers here are shown in <strong>' +
+            cfg.code +
+            '</strong> for <strong>' +
+            cfg.label +
+            '</strong>. App Store / Google Play still show final local tax and billing at checkout.';
+        };
+        select.addEventListener('change', render);
+        render();
+      })();
+    </script>
   </body>
 </html>

@@ -9,7 +9,8 @@ import { useApp } from '../context/AppContext';
 import { colors, radius, shadows, spacing, typography } from '../theme';
 
 export function WelcomeScreen() {
-  const { setRole } = useApp();
+  const { setRole, setAuthMode, state } = useApp();
+  const isLogin = state.authMode === 'login';
   return (
     <Screen scroll>
       <View>
@@ -30,8 +31,26 @@ export function WelcomeScreen() {
 
         <Text style={styles.sectionTitle}>Who are you?</Text>
         <Text style={styles.hint}>
-          Choose one path. You can use another account on a different device later.
+          Choose account type, then continue as existing user or new sign up.
         </Text>
+        <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Account action">
+          <Pressable
+            style={[styles.modeChip, isLogin && styles.modeChipOn]}
+            onPress={() => setAuthMode('login')}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: isLogin }}
+          >
+            <Text style={[styles.modeChipText, isLogin && styles.modeChipTextOn]}>Existing user login</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeChip, !isLogin && styles.modeChipOn]}
+            onPress={() => setAuthMode('signup')}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: !isLogin }}
+          >
+            <Text style={[styles.modeChipText, !isLogin && styles.modeChipTextOn]}>New user sign up</Text>
+          </Pressable>
+        </View>
 
         <Pressable
           accessibilityRole="button"
@@ -53,7 +72,11 @@ export function WelcomeScreen() {
               </View>
               <View style={styles.roleCopy}>
                 <Text style={styles.roleTitle}>I need home help</Text>
-                <Text style={styles.roleSub}>Browse profiles, compare rates, call or WhatsApp</Text>
+                <Text style={styles.roleSub}>
+                  {isLogin
+                    ? 'Login to family account with phone + OTP'
+                    : 'Sign up as family to browse and contact helpers'}
+                </Text>
               </View>
               <View style={styles.chevronWrap}>
                 <Ionicons name="chevron-forward" size={22} color={colors.primaryDark} />
@@ -82,7 +105,11 @@ export function WelcomeScreen() {
               </View>
               <View style={styles.roleCopy}>
                 <Text style={styles.roleTitle}>I offer home help</Text>
-                <Text style={styles.roleSub}>Show services, set rates, receive contacts</Text>
+                <Text style={styles.roleSub}>
+                  {isLogin
+                    ? 'Login to helper account with phone + OTP'
+                    : 'Sign up as helper to list services and rates'}
+                </Text>
               </View>
               <View style={styles.chevronWrap}>
                 <Ionicons name="chevron-forward" size={22} color={colors.primaryDark} />
@@ -156,6 +183,33 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.lg,
     lineHeight: 20,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  modeChip: {
+    flex: 1,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  modeChipOn: {
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.primaryDark,
+  },
+  modeChipText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  modeChipTextOn: {
+    color: colors.primaryDark,
+    fontWeight: '700',
   },
   roleCard: {
     borderRadius: radius.lg,

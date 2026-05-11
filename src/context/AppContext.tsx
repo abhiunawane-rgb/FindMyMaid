@@ -10,15 +10,46 @@ import React, {
 } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import {
+  DEFAULT_PRICING_COUNTRY,
+  type PricingCountry,
+} from '../constants/localeDisplay';
+import {
   FREE_CONTACTS_TOTAL,
   FREE_LEADS_PER_MONTH,
   MAID_PLANS,
   USER_PLANS,
 } from '../constants/subscriptions';
-import { isDemoMaidId, maidOwnProfileToPublic } from '../data/mockMaids';
+import {
+  isDemoMaidId,
+  maidOwnProfileToPublic,
+  normalizeMaidOwnProfile,
+} from '../data/mockMaids';
 import { API_SYNC_ENABLED } from '../constants/api';
-import { exchangeOtpSession, pushMaidProfile, setApiToken } from '../services/backend';
-import { maidIdFromPhone } from '../utils/maidId';
+import type { AccountSnapshotV1 } from '../loginSnapshot';
+import {
+  clearAllSnapshots,
+  clearSnapshotsForPhoneDigits,
+  maidProfileLooksComplete,
+  persistAccountSnapshot,
+  readAccountSnapshot,
+  userProfileLooksComplete,
+} from '../loginSnapshot';
+import {
+  exchangeOtpSession,
+  fetchMaidOwnListing,
+  postMaidReviewToServer,
+  pushMaidProfile,
+  requestOtpDelivery,
+  setApiToken,
+  type OtpSendResult,
+} from '../services/backend';
+import {
+  clearPhoneRoleBindings,
+  getRegisteredRoleForPhone,
+  removeRegisteredRoleForPhone,
+  setRegisteredRoleForPhone,
+} from '../phoneRoleBinding';
+import { maidIdFromPhone, normalizePhoneDigits } from '../utils/maidId';
 import type { MaidOwnProfile, PublicMaid, UserOwnProfile, UserRole } from '../types';
 import { buildDisplayNameFromUserParts } from '../types';
 import { colors } from '../theme';
@@ -26,6 +57,7 @@ import { colors } from '../theme';
 const STORAGE_KEY = 'findmymaid_v2';
 
 export type AuthStep = 'welcome' | 'auth' | 'otp' | 'maid_setup' | 'user_setup' | 'main';
+export type AuthMode = 'signup' | 'login';
 
 export type PlanPeriod = 'monthly' | 'yearly';
 
@@ -40,6 +72,7 @@ type ContactEvent = {
 
 type State = {
   role: UserRole | null;
+  authMode: AuthMode;
   step: AuthStep;
   phone: string;
   displayName: string;
@@ -65,10 +98,13 @@ type State = {
    * Kept after sign-out so you can test maid + customer on one phone without a backend.
    */
   localPublishedMaids: PublicMaid[];
+  /** Pricing display region (UI-only; store billing remains App Store / Play driven). */
+  pricingCountry: PricingCountry;
 };
 
 const defaultState: State = {
   role: null,
+  authMode: 'signup',
   step: 'welcome',
   phone: '',
   displayName: '',
@@ -84,6 +120,7 @@ const defaultState: State = {
   leadsByMaid: {},
   contactEvents: [],
   localPublishedMaids: [],
+  pricingCountry: DEFAULT_PRICING_COUNTRY,
 };
 
 function monthKey(d = new Date()) {
@@ -101,22 +138,81 @@ function normalizeLeads(raw: Record<string, LeadEntry>): Record<string, LeadEntr
   return out;
 }
 
+function buildSnapshotFromState(s: State): AccountSnapshotV1 | null {
+  if (!s.role) return null;
+  if (normalizePhoneDigits(s.phone).length < 8) return null;
+  if (!s.maidProfile && !s.userProfile) return null;
+  return {
+    v: 1,
+    phone: s.phone,
+    displayName: s.displayName,
+    maidProfile: s.maidProfile,
+    userProfile: s.userProfile,
+    userPremiumUntil: s.userPremiumUntil,
+    userPremiumPlan: s.userPremiumPlan,
+    maidProUntil: s.maidProUntil,
+    maidProPlan: s.maidProPlan,
+    freeContactsUsed: s.freeContactsUsed,
+    userPremiumAutoRenew: s.userPremiumAutoRenew,
+    leadsByMaid: { ...s.leadsByMaid },
+    contactEvents: s.contactEvents.map((e) => ({ ...e })),
+    localPublishedMaids: [...s.localPublishedMaids],
+    pricingCountry: s.pricingCountry,
+  };
+}
+
+function normalizeStoredPublicMaid(raw: PublicMaid): PublicMaid {
+  const ratesRaw = raw.rates as { m30?: number; h1?: number; h2?: number; h24?: number };
+  const m30 = Number(ratesRaw?.m30) || 0;
+  const h1 = Number(ratesRaw?.h1) || 0;
+  const h2 = Number(ratesRaw?.h2) || 0;
+  let h24 = Number(ratesRaw?.h24) || 0;
+  if (!(Number.isFinite(h24) && h24 > 0)) {
+    const h2v = Number.isFinite(h2) && h2 > 0 ? h2 : 600;
+    const h1v = Number.isFinite(h1) && h1 > 0 ? h1 : 350;
+    h24 = Math.max(Math.round(h2v * 8), Math.round(h1v * 12));
+  }
+  return {
+    ...raw,
+    age: typeof raw.age === 'number' && Number.isFinite(raw.age) ? raw.age : 30,
+    rates: {
+      m30: Number.isFinite(m30) && m30 > 0 ? m30 : 200,
+      h1: Number.isFinite(h1) && h1 > 0 ? h1 : 350,
+      h2: Number.isFinite(h2) && h2 > 0 ? h2 : 600,
+      h24: Math.round(h24),
+    },
+  };
+}
+
+function mergeLocalPublishedForMaid(maids: PublicMaid[], mp: MaidOwnProfile): PublicMaid[] {
+  const pub = maidOwnProfileToPublic({ ...normalizeMaidOwnProfile(mp), verified: true });
+  const idx = maids.findIndex((m) => m.id === pub.id);
+  if (idx >= 0) return maids.map((m, i) => (i === idx ? pub : m));
+  return [...maids, pub];
+}
+
 type Ctx = {
   state: State;
   setRole: (r: UserRole) => void;
+  setAuthMode: (m: AuthMode) => void;
   setPhone: (p: string) => void;
   setDisplayName: (n: string) => void;
   sendOtp: () => void;
+  /** Resend SMS OTP (same number as on Auth step). */
+  retrySendOtp: () => Promise<OtpSendResult>;
   verifyOtpAndContinue: (code: string) => Promise<boolean>;
   saveMaidProfile: (p: MaidOwnProfile) => void;
   /** Helpers: refresh GPS for discovery distance (same device / local list). */
   updateMaidServiceLocation: () => Promise<boolean>;
   /** Helpers: name and photo only — phone stays fixed. */
-  updateMaidProfile: (updates: Partial<Pick<MaidOwnProfile, 'displayName' | 'photoUri'>>) => void;
+  updateMaidProfile: (
+    updates: Partial<Pick<MaidOwnProfile, 'displayName' | 'photoUri' | 'age' | 'rates'>>
+  ) => void;
   saveUserProfile: (p: UserOwnProfile) => void;
   updateUserProfile: (updates: Partial<UserOwnProfile>) => void;
   logout: () => void;
   deleteAccount: () => void;
+  resetAllLocalData: () => void;
   isUserPremium: () => boolean;
   isMaidPro: () => boolean;
   purchaseUserPremium: (plan: PlanPeriod) => void;
@@ -125,6 +221,15 @@ type Ctx = {
   maidCanReceiveContact: (maidId: string) => boolean;
   getLeadCount: (maidId: string) => number;
   registerContact: (maidId: string) => boolean;
+  /** Updates local contact timeline; when API sync is on, publishes review for other families. */
+  submitContactReview: (
+    contactId: string,
+    maidId: string,
+    rating: number,
+    review: string
+  ) => Promise<PublicMaid | null>;
+  getContactsForMaid: (maidId: string) => ContactEvent[];
+  setPricingCountry: (country: PricingCountry) => void;
   setUserPremiumAutoRenew: (v: boolean) => void;
   FREE_CONTACTS_TOTAL: number;
   FREE_LEADS_PER_MONTH: number;
@@ -194,6 +299,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (parsed.maidProfile && !parsed.maidProfile.gender) {
             parsed.maidProfile = { ...parsed.maidProfile, gender: 'female' };
           }
+          if (parsed.maidProfile && typeof parsed.maidProfile.age !== 'number') {
+            parsed.maidProfile = { ...parsed.maidProfile, age: 30 };
+          }
+          if (parsed.maidProfile && typeof parsed.maidProfile === 'object') {
+            parsed.maidProfile = normalizeMaidOwnProfile(parsed.maidProfile as MaidOwnProfile);
+          }
           if (parsed.userProfile && !parsed.userProfile.gender) {
             parsed.userProfile = { ...parsed.userProfile, gender: 'female' };
           }
@@ -209,6 +320,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let localPublished = Array.isArray(parsed.localPublishedMaids)
             ? (parsed.localPublishedMaids as PublicMaid[])
             : [];
+          localPublished = localPublished.map((m) => normalizeStoredPublicMaid(m));
           if (parsed.maidProfile?.id) {
             const pub = maidOwnProfileToPublic(parsed.maidProfile as MaidOwnProfile);
             const idx = localPublished.findIndex((pm) => pm.id === pub.id);
@@ -243,6 +355,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, role, step: 'auth' }));
   }, []);
 
+  const setAuthMode = useCallback((authMode: AuthMode) => {
+    setState((s) => ({ ...s, authMode, step: 'auth' }));
+  }, []);
+
   const setPhone = useCallback((phone: string) => {
     setState((s) => ({ ...s, phone }));
   }, []);
@@ -255,11 +371,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, otpSent: true, step: 'otp' }));
   }, []);
 
+  const retrySendOtp = useCallback(async (): Promise<OtpSendResult> => {
+    const raw = state.phone.trim();
+    if (raw.length < 5) return 'bad_request';
+    return requestOtpDelivery(raw);
+  }, [state.phone]);
+
   const backFromAuth = useCallback(() => {
     setState((s) => ({
       ...s,
       step: 'welcome',
       role: null,
+      authMode: 'signup',
       phone: '',
       displayName: '',
       otpSent: false,
@@ -282,38 +405,156 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (code: string) => {
       const role = state.role;
       const phone = state.phone;
-      if (!role) return false;
-      const result = await exchangeOtpSession(phone, role, code);
-      if (!result.ok) {
-        if (result.reason === 'invalid_code') {
-          Alert.alert('Invalid code', 'Enter the verification code we sent to your phone.');
-        } else if (result.reason === 'network') {
-          Alert.alert(
-            'Sign-in failed',
-            'Could not reach the FindMyMaid server. Check EXPO_PUBLIC_API_URL and that the API is running.'
-          );
-        } else if (result.reason === 'sms_not_configured') {
-          Alert.alert(
-            'SMS not configured',
-            'The server cannot verify codes yet. Configure Twilio on the API or set OTP_DEV_BYPASS for development.'
-          );
-        } else {
-          Alert.alert('Sign-in failed', 'Something went wrong. Try again in a moment.');
-        }
+      if (!role) {
+        Alert.alert(
+          'Can’t verify yet',
+          'Go back once, confirm you chose Family or Helper, enter your number, then try the code again.'
+        );
         return false;
       }
-      setState((s) => ({
-        ...s,
-        step: role === 'maid' ? 'maid_setup' : 'user_setup',
-        phone: s.phone,
-      }));
-      return true;
+      try {
+        const result = await exchangeOtpSession(phone, role, code);
+        if (!result.ok) {
+          if (result.reason === 'invalid_code') {
+            Alert.alert('Invalid code', 'Enter the verification code we sent to your phone.');
+          } else if (result.reason === 'invalid_phone') {
+            Alert.alert(
+              'Invalid phone number',
+              'This phone number format is not valid. Go back and include country code if needed.'
+            );
+          } else if (result.reason === 'network') {
+            Alert.alert(
+              'Sign-in failed',
+              'Could not reach the FindMyMaid server or the request timed out. Check Wi‑Fi/mobile data and that the API URL is correct in your build.'
+            );
+          } else if (result.reason === 'sms_verify_failed') {
+            Alert.alert(
+              'SMS verification error',
+              'The server could not verify this code with the SMS provider. Try Resend OTP, or check Twilio Verify on the backend.'
+            );
+          } else if (result.reason === 'sms_not_configured') {
+            Alert.alert(
+              'SMS not configured',
+              'The server cannot verify codes yet. Configure Twilio on the API or set OTP_DEV_BYPASS for development.'
+            );
+          } else if (result.reason === 'phone_role_conflict') {
+            Alert.alert(
+              'Number already signed up differently',
+              'This mobile number is already linked as another account type. Use your original role to sign in, or sign up with a different number.'
+            );
+          } else {
+            Alert.alert('Sign-in failed', 'Something went wrong. Try again in a moment.');
+          }
+          return false;
+        }
+
+        const phoneNorm = normalizePhoneDigits(phone);
+        if (phoneNorm.length >= 8) {
+          const existingBind = await getRegisteredRoleForPhone(phone);
+          if (existingBind && existingBind !== role) {
+            Alert.alert(
+              'This phone is locked to another profile type here',
+              'On this device, this number already finished sign-up as a ' +
+                (existingBind === 'maid' ? 'helper' : 'family') +
+                '. One number cannot be both. Use Erase all local data in Settings to reset this phone, then create a fresh account.'
+            );
+            return false;
+          }
+          await setRegisteredRoleForPhone(phone, role);
+        }
+
+        const authMode = state.authMode;
+
+        if (role === 'maid' && API_SYNC_ENABLED) {
+          const remote = await fetchMaidOwnListing();
+          if (remote && maidProfileLooksComplete(normalizeMaidOwnProfile(remote))) {
+            const snapExtras =
+              authMode === 'login' && phoneNorm.length >= 8
+                ? await readAccountSnapshot(phoneNorm, role)
+                : null;
+            const maidPro = { ...normalizeMaidOwnProfile(remote), verified: true as const };
+            setState({
+              ...defaultState,
+              role,
+              authMode,
+              phone,
+              otpSent: false,
+              step: 'main',
+              maidProfile: maidPro,
+              displayName: remote.displayName.trim() || state.displayName,
+              localPublishedMaids: mergeLocalPublishedForMaid([], maidPro),
+              maidProUntil: snapExtras?.maidProUntil ?? null,
+              maidProPlan: snapExtras?.maidProPlan ?? 'none',
+              pricingCountry: snapExtras?.pricingCountry ?? DEFAULT_PRICING_COUNTRY,
+            });
+            return true;
+          }
+        }
+
+        if (authMode === 'login' && phoneNorm.length >= 8) {
+          const snap = await readAccountSnapshot(phoneNorm, role);
+          if (snap) {
+            const snapMaid = snap.maidProfile ? normalizeMaidOwnProfile(snap.maidProfile) : null;
+            let localPublishedMaids = Array.isArray(snap.localPublishedMaids)
+              ? [...snap.localPublishedMaids.map((m) => normalizeStoredPublicMaid(m))]
+              : [];
+            if (role === 'maid' && snapMaid?.id && maidProfileLooksComplete(snapMaid)) {
+              localPublishedMaids = mergeLocalPublishedForMaid(localPublishedMaids, snapMaid);
+            }
+            const maidOk =
+              role === 'maid' && snapMaid != null && maidProfileLooksComplete(snapMaid);
+            const userOk =
+              role === 'user' &&
+              snap.userProfile != null &&
+              userProfileLooksComplete(snap.userProfile);
+            if (maidOk || userOk) {
+              setState({
+                ...defaultState,
+                phone: phone.trim().length ? phone : snap.phone,
+                displayName: snap.displayName,
+                maidProfile: snapMaid,
+                userProfile: snap.userProfile,
+                userPremiumUntil: snap.userPremiumUntil,
+                userPremiumPlan: snap.userPremiumPlan,
+                maidProUntil: snap.maidProUntil,
+                maidProPlan: snap.maidProPlan,
+                freeContactsUsed: snap.freeContactsUsed,
+                userPremiumAutoRenew: snap.userPremiumAutoRenew,
+                leadsByMaid: normalizeLeads(snap.leadsByMaid ?? {}),
+                contactEvents: [...(snap.contactEvents ?? [])],
+                localPublishedMaids,
+                pricingCountry: snap.pricingCountry,
+                role,
+                authMode,
+                otpSent: false,
+                step: 'main',
+              });
+              return true;
+            }
+          }
+        }
+
+        setState((s0) => ({
+          ...s0,
+          otpSent: false,
+          phone,
+          step: role === 'maid' ? 'maid_setup' : 'user_setup',
+        }));
+        return true;
+      } catch {
+        Alert.alert(
+          'Verification interrupted',
+          'Check your internet connection and try again. If it keeps failing, reinstall the latest app build.'
+        );
+        return false;
+      }
     },
-    [state.phone, state.role]
+    [state.phone, state.role, state.authMode, state.displayName]
   );
 
   const saveMaidProfile = useCallback((maidProfile: MaidOwnProfile) => {
-    const full = { ...maidProfile, verified: true };
+    const full = { ...normalizeMaidOwnProfile(maidProfile), verified: true };
+    void setRegisteredRoleForPhone(full.phone, 'maid');
     const pub = maidOwnProfileToPublic(full);
     setState((s) => {
       const idx = s.localPublishedMaids.findIndex((m) => m.id === pub.id);
@@ -324,6 +565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return {
         ...s,
         maidProfile: full,
+        displayName: full.displayName.trim() || s.displayName,
         localPublishedMaids,
         step: 'main',
       };
@@ -375,10 +617,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.maidProfile]);
 
   const updateMaidProfile = useCallback(
-    (updates: Partial<Pick<MaidOwnProfile, 'displayName' | 'photoUri'>>) => {
+    (updates: Partial<Pick<MaidOwnProfile, 'displayName' | 'photoUri' | 'age' | 'rates'>>) => {
       setState((s) => {
         if (!s.maidProfile) return s;
-        const merged: MaidOwnProfile = { ...s.maidProfile, ...updates };
+        const merged: MaidOwnProfile = normalizeMaidOwnProfile({
+          ...s.maidProfile,
+          ...updates,
+          rates: updates.rates ? { ...s.maidProfile.rates, ...updates.rates } : s.maidProfile.rates,
+        });
         if (updates.displayName !== undefined) {
           merged.displayName = updates.displayName.trim();
         }
@@ -412,6 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const saveUserProfile = useCallback((userProfile: UserOwnProfile) => {
     const full = buildDisplayNameFromUserParts(userProfile);
+    void setRegisteredRoleForPhone(userProfile.phone, 'user');
     setState((s) => ({
       ...s,
       userProfile: { ...userProfile, displayName: full },
@@ -435,14 +682,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     void setApiToken(null);
-    setState((s) => ({
-      ...defaultState,
-      localPublishedMaids: s.localPublishedMaids,
-    }));
+    setState((s) => {
+      const snap = buildSnapshotFromState(s);
+      if (snap && s.role) void persistAccountSnapshot(snap, s.role);
+      return {
+        ...defaultState,
+        localPublishedMaids: s.localPublishedMaids,
+      };
+    });
   }, []);
 
   const deleteAccount = useCallback(() => {
     void setApiToken(null);
+    void clearSnapshotsForPhoneDigits(state.phone);
+    void removeRegisteredRoleForPhone(state.phone);
+    setState(defaultState);
+    AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  }, [state.phone]);
+
+  const resetAllLocalData = useCallback(() => {
+    void setApiToken(null);
+    void clearAllSnapshots();
+    void clearPhoneRoleBindings();
     setState(defaultState);
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
   }, []);
@@ -477,6 +738,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setUserPremiumAutoRenew = useCallback((userPremiumAutoRenew: boolean) => {
     setState((s) => ({ ...s, userPremiumAutoRenew }));
+  }, []);
+
+  const setPricingCountry = useCallback((pricingCountry: PricingCountry) => {
+    setState((s) => ({ ...s, pricingCountry }));
   }, []);
 
   const getLeadCount = useCallback(
@@ -515,6 +780,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (maidId: string) => {
       if (!maidCanReceiveContact(maidId)) return false;
       if (!canContactMaid()) return false;
+      if (state.contactEvents.some((e) => e.maidId === maidId)) return true;
 
       if (isUserPremium()) {
         if (!isDemoMaidId(maidId)) {
@@ -571,16 +837,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       return ok;
     },
-    [canContactMaid, isUserPremium, maidCanReceiveContact]
+    [canContactMaid, isUserPremium, maidCanReceiveContact, state.contactEvents]
+  );
+
+  const submitContactReview = useCallback(
+    async (
+      contactId: string,
+      maidId: string,
+      rating: number,
+      review: string
+    ): Promise<PublicMaid | null> => {
+      const trimmed = review.trim();
+      if (trimmed.length < 1) {
+        Alert.alert(
+          'Add a comment',
+          'Write a short note so other families can learn from your experience.'
+        );
+        return null;
+      }
+      const rn = Math.max(1, Math.min(5, Math.round(rating)));
+      const authorDisplayName = (
+        state.userProfile
+          ? buildDisplayNameFromUserParts(state.userProfile)
+          : state.displayName.trim()
+      ).trim();
+      if (authorDisplayName.length < 2) {
+        Alert.alert(
+          'Name required',
+          'Add your name in My Profile (or finish sign-up) before posting a public review.'
+        );
+        return null;
+      }
+
+      setState((s) => ({
+        ...s,
+        contactEvents: s.contactEvents.map((e) =>
+          e.id === contactId
+            ? {
+                ...e,
+                userRating: rn,
+                userReview: trimmed,
+              }
+            : e
+        ),
+      }));
+
+      if (!API_SYNC_ENABLED || isDemoMaidId(maidId)) return null;
+
+      const updated = await postMaidReviewToServer(maidId, {
+        rating: rn,
+        comment: trimmed,
+        authorDisplayName,
+        authorPhotoUri: state.userProfile?.photoUri ?? null,
+      });
+      return updated;
+    },
+    [state.displayName, state.userProfile]
+  );
+
+  const getContactsForMaid = useCallback(
+    (maidId: string) => state.contactEvents.filter((e) => e.maidId === maidId),
+    [state.contactEvents]
   );
 
   const value = useMemo(
     () => ({
       state,
       setRole,
+      setAuthMode,
       setPhone,
       setDisplayName,
       sendOtp,
+      retrySendOtp,
       verifyOtpAndContinue,
       saveMaidProfile,
       updateMaidServiceLocation,
@@ -589,6 +917,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateUserProfile,
       logout,
       deleteAccount,
+      resetAllLocalData,
       isUserPremium,
       isMaidPro,
       purchaseUserPremium,
@@ -597,6 +926,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maidCanReceiveContact,
       getLeadCount,
       registerContact,
+      submitContactReview,
+      getContactsForMaid,
+      setPricingCountry,
       setUserPremiumAutoRenew,
       FREE_CONTACTS_TOTAL,
       FREE_LEADS_PER_MONTH,
@@ -607,9 +939,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       state,
       setRole,
+      setAuthMode,
       setPhone,
       setDisplayName,
       sendOtp,
+      retrySendOtp,
       backFromAuth,
       backFromOtp,
       backFromSetup,
@@ -621,6 +955,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateUserProfile,
       logout,
       deleteAccount,
+      resetAllLocalData,
       isUserPremium,
       isMaidPro,
       purchaseUserPremium,
@@ -629,6 +964,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maidCanReceiveContact,
       getLeadCount,
       registerContact,
+      submitContactReview,
+      getContactsForMaid,
+      setPricingCountry,
       setUserPremiumAutoRenew,
     ]
   );

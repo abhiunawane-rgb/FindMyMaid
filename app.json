@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "FindMyMaid uses your location to sort helpers by distance and to set your service area when you create a helper profile.",
         "NSPhotoLibraryUsageDescription": "Choose a clear photo for your helper profile.",
-        "NSCameraUsageDescription": "Take a photo for your helper profile."
+        "NSCameraUsageDescription": "Take a photo for your helper profile.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

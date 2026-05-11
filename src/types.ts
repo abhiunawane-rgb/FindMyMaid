@@ -31,11 +31,12 @@ export type PublicMaid = {
   displayName: string;
   photoUri: string | null;
   gender: Gender;
+  age: number;
   /** Approximate distance label, e.g. "1.2 km" */
   distanceLabel: string;
   /** km from user when location is on; used for sorting */
   distanceKm?: number;
-  rates: { m30: number; h1: number; h2: number };
+  rates: { m30: number; h1: number; h2: number; h24: number };
   services: ServiceId[];
   ratingAvg: number;
   reviewCount: number;
@@ -55,8 +56,9 @@ export type MaidOwnProfile = {
   displayName: string;
   phone: string;
   gender: Gender;
+  age: number;
   photoUri: string | null;
-  rates: { m30: number; h1: number; h2: number };
+  rates: { m30: number; h1: number; h2: number; h24: number };
   services: ServiceId[];
   verified: boolean;
   /** Current device location at profile save — used so nearby families see real distance. */

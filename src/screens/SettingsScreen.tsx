@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { APP_DISPLAY_NAME } from '../constants/branding';
+import { profilePlaceholderByGender } from '../constants/placeholders';
 import { WEBSITE_BASE_URL } from '../constants/subscriptions';
 import { MOCK_MAIDS } from '../data/mockMaids';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -40,6 +41,7 @@ export function SettingsScreen({ role }: Props) {
     isMaidPro,
     FREE_CONTACTS_TOTAL,
     updateMaidServiceLocation,
+    resetAllLocalData,
   } = useApp();
   const [locUpdating, setLocUpdating] = useState(false);
   const isUser = role === 'user';
@@ -49,6 +51,7 @@ export function SettingsScreen({ role }: Props) {
       : state.userProfile
         ? buildDisplayNameFromUserParts(state.userProfile)
         : undefined;
+  const profileGender = role === 'maid' ? state.maidProfile?.gender ?? 'female' : state.userProfile?.gender ?? 'female';
   const photoUri = role === 'maid' ? state.maidProfile?.photoUri : state.userProfile?.photoUri;
   const premium = isUser && isUserPremium();
   const maidPro = !isUser && isMaidPro();
@@ -60,9 +63,15 @@ export function SettingsScreen({ role }: Props) {
       const maid =
         MOCK_MAIDS.find((m) => m.id === e.maidId) ??
         state.localPublishedMaids.find((m) => m.id === e.maidId);
-      return { ...e, maidName: maid?.displayName ?? 'Helper' };
+      return {
+        ...e,
+        maidName: maid?.displayName ?? 'Helper',
+        maidPhotoUri: maid?.photoUri ?? null,
+        maidGender: maid?.gender ?? 'female',
+        maid,
+      };
     });
-  const pendingReviews = contactEvents.filter((e) => !e.userRating).length;
+  const pendingReviews = contactEvents.filter((e) => e.userRating == null).length;
 
   const confirmLogout = () => {
     Alert.alert('Sign out?', 'You can sign in again with your number.', [
@@ -92,12 +101,7 @@ export function SettingsScreen({ role }: Props) {
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.avatar} />
               ) : (
-                <LinearGradient
-                  colors={['#E8E8E8', '#F5F5F5']}
-                  style={styles.avatarPlaceholder}
-                >
-                  <Ionicons name="person" size={36} color={colors.textSecondary} />
-                </LinearGradient>
+                <Image source={{ uri: profilePlaceholderByGender(profileGender) }} style={styles.avatar} />
               )}
             </View>
             <View style={styles.profileTextCol}>
@@ -324,11 +328,33 @@ export function SettingsScreen({ role }: Props) {
                     </Text>
                   </View>
                   <View style={styles.activityCardBody}>
-                    <Text style={styles.activityName}>{e.maidName}</Text>
+                    <View style={styles.activityTopRow}>
+                      {e.maidPhotoUri ? (
+                        <Image source={{ uri: e.maidPhotoUri }} style={styles.activityAvatar} />
+                      ) : (
+                        <Image
+                          source={{ uri: profilePlaceholderByGender(e.maidGender) }}
+                          style={styles.activityAvatar}
+                        />
+                      )}
+                      <Text style={styles.activityName}>{e.maidName}</Text>
+                    </View>
                     <Text style={styles.timelineMeta}>
                       {e.userRating ? `★ ${e.userRating}` : 'Review pending'}
                       {e.userReview ? ` · “${e.userReview}”` : ''}
                     </Text>
+                    {!e.userRating && e.maid ? (
+                      <Pressable
+                        style={styles.rateNowBtn}
+                        onPress={() => {
+                          const maidForReview = e.maid;
+                          if (!maidForReview) return;
+                          userStackNav?.navigate('MaidDetail', { maid: maidForReview });
+                        }}
+                      >
+                        <Text style={styles.rateNowBtnText}>Rate now</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               ))
@@ -343,6 +369,7 @@ export function SettingsScreen({ role }: Props) {
             )}
           </View>
         )}
+
       </View>
 
       <Text style={styles.sectionHeading}>Support & legal</Text>
@@ -390,6 +417,21 @@ export function SettingsScreen({ role }: Props) {
         accessibilityLabel="Delete account"
       >
         <Text style={styles.deleteText}>Delete my account</Text>
+      </Pressable>
+      <Pressable
+        style={styles.resetAllBtn}
+        onPress={() =>
+          Alert.alert(
+            'Reset all local data?',
+            'This clears every local profile, contact history, saved login snapshot, and the “one number / one role” memory on this phone so you can start from zero.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Reset all', style: 'destructive', onPress: resetAllLocalData },
+            ]
+          )
+        }
+      >
+        <Text style={styles.resetAllText}>Reset all app data on this phone</Text>
       </Pressable>
     </Screen>
   );
@@ -761,10 +803,21 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  activityTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  activityAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primaryMuted,
+  },
   activityName: {
     ...typography.bodyMedium,
     color: colors.text,
-    marginBottom: 2,
+    flex: 1,
   },
   timelineMeta: {
     ...typography.caption,
@@ -788,6 +841,21 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     flex: 1,
     lineHeight: 18,
+  },
+  rateNowBtn: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    backgroundColor: colors.primaryMuted,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  rateNowBtnText: {
+    ...typography.small,
+    color: colors.primaryDark,
+    fontWeight: '700',
   },
   sectionHeading: {
     ...typography.small,
@@ -851,5 +919,14 @@ const styles = StyleSheet.create({
   deleteText: {
     ...typography.bodyMedium,
     color: '#B00020',
+  },
+  resetAllBtn: {
+    alignItems: 'center',
+    paddingBottom: spacing.xxl,
+  },
+  resetAllText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
   },
 });

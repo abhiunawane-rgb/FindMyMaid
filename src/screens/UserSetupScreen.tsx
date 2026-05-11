@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthBackRow } from '../components/AuthBackRow';
 import { BrandLogo } from '../components/BrandLogo';
@@ -11,10 +11,16 @@ import type { Gender, UserOwnProfile } from '../types';
 import { colors, radius, spacing, touchMin, typography } from '../theme';
 
 export function UserSetupScreen() {
-  const { state, saveUserProfile, backFromSetup } = useApp();
+  const { state, saveUserProfile, backFromSetup, setDisplayName } = useApp();
+  const [fullName, setFullName] = useState(state.displayName.trim());
   const [city, setCity] = useState('');
   const [gender, setGender] = useState<Gender | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    const d = state.displayName.trim();
+    if (d.length >= 2) setFullName(d);
+  }, [state.displayName]);
 
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -35,7 +41,12 @@ export function UserSetupScreen() {
     if (!gender) {
       return;
     }
-    const raw = state.displayName.trim();
+    const raw = fullName.trim();
+    if (raw.length < 2) {
+      Alert.alert('Add your name', 'Enter the name you want on your profile (at least 2 characters).');
+      return;
+    }
+    setDisplayName(raw);
     const parts = raw.split(/\s+/).filter(Boolean);
     const firstName = parts[0] || '';
     const lastName = parts.slice(1).join(' ') || '';
@@ -64,7 +75,15 @@ export function UserSetupScreen() {
       </Text>
 
       <Text style={styles.label}>Your name</Text>
-      <Text style={styles.readonly}>{state.displayName}</Text>
+      <TextInput
+        value={fullName}
+        onChangeText={setFullName}
+        placeholder="e.g. Anita Sharma"
+        placeholderTextColor={colors.textSecondary}
+        style={styles.input}
+        autoCapitalize="words"
+        accessibilityLabel="Your display name"
+      />
 
       <Pressable
         onPress={pickPhoto}
@@ -151,11 +170,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
-  },
-  readonly: {
-    ...typography.body,
-    color: colors.text,
-    marginBottom: spacing.lg,
   },
   photoBox: {
     width: 104,

@@ -5,6 +5,7 @@ import { AppNameMark } from '../components/AppNameMark';
 import { MainBanner } from '../components/MainBanner';
 import { APP_DISPLAY_NAME } from '../constants/branding';
 import { formatPrice } from '../constants/localeDisplay';
+import { helperProfileImageSource } from '../constants/placeholders';
 import { useApp } from '../context/AppContext';
 import { SERVICE_LABELS } from '../types';
 import { colors, radius, shadows, spacing, touchMin, typography } from '../theme';
@@ -98,11 +99,7 @@ export function MaidHomeScreen() {
       <View style={styles.listingCard}>
         <View style={styles.listingHeader}>
           <View style={styles.avatar}>
-            {m.photoUri ? (
-              <Image source={{ uri: m.photoUri }} style={styles.avatarImg} />
-            ) : (
-              <Text style={styles.avatarLetter}>{m.displayName.charAt(0)}</Text>
-            )}
+            <Image source={helperProfileImageSource(m.photoUri, m.gender)} style={styles.avatarImg} />
           </View>
           <View style={styles.listingHeaderText}>
             <Text style={styles.name}>{m.displayName}</Text>
@@ -113,7 +110,8 @@ export function MaidHomeScreen() {
                 color={m.verified ? colors.success : colors.warning}
               />
               <Text style={styles.metaLine}>
-                {m.gender === 'male' ? 'Male' : 'Female'} · {m.verified ? 'Verified' : 'Pending review'}
+                {m.gender === 'male' ? 'Male' : 'Female'} · {m.age} yrs ·{' '}
+                {m.verified ? 'Verified' : 'Pending review'}
               </Text>
             </View>
           </View>
@@ -122,15 +120,19 @@ export function MaidHomeScreen() {
         <View style={styles.rateGrid}>
           <View style={styles.rateTile}>
             <Text style={styles.rateTileLabel}>30 min</Text>
-            <Text style={styles.rateTileValue}>{formatPrice(m.rates.m30)}</Text>
+            <Text style={styles.rateTileValue}>{formatPrice(m.rates.m30, state.pricingCountry)}</Text>
           </View>
           <View style={styles.rateTile}>
             <Text style={styles.rateTileLabel}>1 hour</Text>
-            <Text style={styles.rateTileValue}>{formatPrice(m.rates.h1)}</Text>
+            <Text style={styles.rateTileValue}>{formatPrice(m.rates.h1, state.pricingCountry)}</Text>
           </View>
           <View style={styles.rateTile}>
             <Text style={styles.rateTileLabel}>2 hours</Text>
-            <Text style={styles.rateTileValue}>{formatPrice(m.rates.h2)}</Text>
+            <Text style={styles.rateTileValue}>{formatPrice(m.rates.h2, state.pricingCountry)}</Text>
+          </View>
+          <View style={styles.rateTile}>
+            <Text style={styles.rateTileLabel}>24 hours</Text>
+            <Text style={styles.rateTileValue}>{formatPrice(m.rates.h24, state.pricingCountry)}</Text>
           </View>
         </View>
 
@@ -371,11 +373,14 @@ const styles = StyleSheet.create({
   metaLine: { ...typography.caption, color: colors.textSecondary, flex: 1 },
   rateGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.lg,
   },
   rateTile: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '47%',
+    minWidth: 140,
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.sm,

@@ -56,7 +56,9 @@ export function MaidEarnScreen() {
               <Text style={styles.planName}>Monthly</Text>
               <Text style={styles.planHint}>Start small</Text>
             </View>
-            <Text style={styles.planPrice}>{formatPrice(MAID_PLANS.monthly.priceInr)}/mo</Text>
+            <Text style={styles.planPrice}>
+              {formatPrice(MAID_PLANS.monthly.priceInr, state.pricingCountry)}/mo
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => setSelected('yearly')}
@@ -66,7 +68,9 @@ export function MaidEarnScreen() {
               <Text style={styles.planName}>Yearly</Text>
               <Text style={styles.planHint}>Save ~{yearlySave}% vs 12× monthly</Text>
             </View>
-            <Text style={styles.planPrice}>{formatPrice(MAID_PLANS.yearly.priceInr)}/yr</Text>
+            <Text style={styles.planPrice}>
+              {formatPrice(MAID_PLANS.yearly.priceInr, state.pricingCountry)}/yr
+            </Text>
           </Pressable>
           <Text style={styles.legal}>
             Product IDs: {MAID_PLANS.monthly.id}, {MAID_PLANS.yearly.id} (configure in App Store
@@ -81,7 +85,8 @@ export function MaidEarnScreen() {
               : `Subscribe Maid Pro — ${formatPrice(
                   selected === 'yearly'
                     ? MAID_PLANS.yearly.priceInr
-                    : MAID_PLANS.monthly.priceInr
+                    : MAID_PLANS.monthly.priceInr,
+                  state.pricingCountry
                 )}`
           }
           onPress={() => purchaseMaidPro(selected)}

@@ -23,6 +23,7 @@ import { API_SYNC_ENABLED } from '../constants/api';
 import { APP_DISPLAY_NAME } from '../constants/branding';
 import { SHOW_SAMPLE_NEARBY_LISTINGS } from '../constants/discovery';
 import { formatPrice } from '../constants/localeDisplay';
+import { helperProfileImageSource } from '../constants/placeholders';
 import { EmptyState } from '../components/EmptyState';
 import { useApp } from '../context/AppContext';
 import { MOCK_CENTER, MOCK_MAIDS, withDistances } from '../data/mockMaids';
@@ -575,13 +576,10 @@ export function UserDiscoverScreen() {
             <View style={styles.cardAccent} />
             <View style={styles.cardInner}>
               <View style={styles.avatar}>
-                {item.photoUri ? (
-                  <Image source={{ uri: item.photoUri }} style={styles.avatarImg} />
-                ) : (
-                  <Text style={styles.avatarLetter}>
-                    {item.displayName.charAt(0).toUpperCase()}
-                  </Text>
-                )}
+                <Image
+                  source={helperProfileImageSource(item.photoUri, item.gender)}
+                  style={styles.avatarImg}
+                />
               </View>
               <View style={styles.cardBody}>
                 <View style={styles.cardTopRow}>
@@ -600,16 +598,21 @@ export function UserDiscoverScreen() {
                       {item.ratingAvg.toFixed(1)} ({item.reviewCount} reviews)
                     </Text>
                   </View>
-                  <Ionicons
-                    name={item.gender === 'male' ? 'man-outline' : 'woman-outline'}
-                    size={18}
-                    color={colors.textSecondary}
-                    accessibilityLabel={item.gender === 'male' ? 'Male' : 'Female'}
-                  />
+                  <View style={styles.genderPill}>
+                    <Ionicons
+                      name={item.gender === 'male' ? 'man' : 'woman'}
+                      size={14}
+                      color={colors.primaryDark}
+                    />
+                    <Text style={styles.genderPillText}>{item.gender === 'male' ? 'Male' : 'Female'}</Text>
+                  </View>
                 </View>
-                <Text style={styles.rates} numberOfLines={1}>
-                  From {formatPrice(item.rates.h1)} / hr · 30m {formatPrice(item.rates.m30)} · 2h{' '}
-                  {formatPrice(item.rates.h2)}
+                <Text style={styles.metaSmall}>Age {item.age}</Text>
+                <Text style={styles.rates} numberOfLines={2}>
+                  30m {formatPrice(item.rates.m30, state.pricingCountry)} · 1h{' '}
+                  {formatPrice(item.rates.h1, state.pricingCountry)} · 2h{' '}
+                  {formatPrice(item.rates.h2, state.pricingCountry)} · 24h{' '}
+                  {formatPrice(item.rates.h24, state.pricingCountry)}
                 </Text>
                 <View style={styles.tags}>
                   {item.services.slice(0, 3).map((s) => (
@@ -977,10 +980,6 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarLetter: {
-    ...typography.headline,
-    color: colors.primaryDark,
-  },
   cardBody: { flex: 1, minWidth: 0 },
   cardTopRow: {
     flexDirection: 'row',
@@ -1030,6 +1029,26 @@ const styles = StyleSheet.create({
   meta: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  metaSmall: {
+    ...typography.small,
+    color: colors.textSecondary,
+  },
+  genderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  genderPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryDark,
   },
   rates: {
     ...typography.small,

@@ -5,7 +5,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-nati
 import { AppNameMark } from '../components/AppNameMark';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
-import { formatPrice } from '../constants/localeDisplay';
+import { CURRENCY_CONFIG, PRICING_COUNTRIES, formatPrice } from '../constants/localeDisplay';
 import { USER_PLANS, WEBSITE_BASE_URL } from '../constants/subscriptions';
 import { useApp, type PlanPeriod } from '../context/AppContext';
 import { colors, radius, shadows, spacing, touchMin, typography } from '../theme';
@@ -31,7 +31,7 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; sub: stri
 ];
 
 export function UserPremiumScreen() {
-  const { isUserPremium, purchaseUserPremium, state, FREE_CONTACTS_TOTAL } = useApp();
+  const { isUserPremium, purchaseUserPremium, state, FREE_CONTACTS_TOTAL, setPricingCountry } = useApp();
   const premium = isUserPremium();
   const [selected, setSelected] = useState<PlanPeriod>('yearly');
 
@@ -157,6 +157,27 @@ export function UserPremiumScreen() {
           ))}
         </View>
 
+        <Text style={styles.sectionKicker}>DISPLAY</Text>
+        <Text style={styles.sectionTitle}>Currency & billing region</Text>
+        <Text style={styles.currencySub}>
+          How prices appear in the app below. Checkout still uses Apple or Google in your locale.
+        </Text>
+        <View style={styles.countryRow}>
+          {PRICING_COUNTRIES.map((country) => (
+            <Pressable
+              key={country}
+              onPress={() => setPricingCountry(country)}
+              style={[styles.countryChip, state.pricingCountry === country && styles.countryChipOn]}
+              accessibilityRole="button"
+              accessibilityLabel={`Pricing in ${country}`}
+            >
+              <Text style={[styles.countryChipText, state.pricingCountry === country && styles.countryChipTextOn]}>
+                {country} · {CURRENCY_CONFIG[country].currencyCode}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         <Text style={styles.sectionKicker}>PLANS</Text>
         <Text style={styles.sectionTitle}>Choose billing</Text>
 
@@ -173,7 +194,9 @@ export function UserPremiumScreen() {
               {selected === 'monthly' ? <View style={styles.planRadioDot} /> : null}
             </View>
             <Text style={styles.planTileLabel}>Monthly</Text>
-            <Text style={styles.planTilePrice}>{formatPrice(USER_PLANS.monthly.priceInr)}</Text>
+            <Text style={styles.planTilePrice}>
+              {formatPrice(USER_PLANS.monthly.priceInr, state.pricingCountry)}
+            </Text>
             <Text style={styles.planTileUnit}>per month</Text>
           </Pressable>
 
@@ -193,7 +216,9 @@ export function UserPremiumScreen() {
               {selected === 'yearly' ? <View style={styles.planRadioDot} /> : null}
             </View>
             <Text style={styles.planTileLabel}>Yearly</Text>
-            <Text style={styles.planTilePrice}>{formatPrice(USER_PLANS.yearly.priceInr)}</Text>
+            <Text style={styles.planTilePrice}>
+              {formatPrice(USER_PLANS.yearly.priceInr, state.pricingCountry)}
+            </Text>
             <Text style={styles.planTileUnit}>per year · best value</Text>
           </Pressable>
         </View>
@@ -208,7 +233,8 @@ export function UserPremiumScreen() {
             premium
               ? `Extend (${selected === 'yearly' ? 'Yearly' : 'Monthly'}) — demo`
               : `Subscribe — ${formatPrice(
-                  selected === 'yearly' ? USER_PLANS.yearly.priceInr : USER_PLANS.monthly.priceInr
+                  selected === 'yearly' ? USER_PLANS.yearly.priceInr : USER_PLANS.monthly.priceInr,
+                  state.pricingCountry
                 )}`
           }
           onPress={onBuy}
@@ -422,8 +448,40 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: colors.primaryDark,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     letterSpacing: -0.3,
+  },
+  currencySub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+    lineHeight: 20,
+  },
+  countryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  countryChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  countryChipOn: {
+    borderColor: colors.accentDark,
+    backgroundColor: colors.primaryMuted,
+  },
+  countryChipText: {
+    ...typography.small,
+    color: colors.text,
+  },
+  countryChipTextOn: {
+    color: colors.primaryDark,
+    fontWeight: '700',
   },
   featureStack: {
     gap: spacing.md,

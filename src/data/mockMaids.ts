@@ -72,8 +72,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Sunita K.',
     photoUri: PORTRAITS.m1,
     gender: 'female',
+    age: 34,
     distanceLabel: '—',
-    rates: { m30: 200, h1: 350, h2: 600 },
+    rates: { m30: 200, h1: 350, h2: 600, h24: 5200 },
     services: ['house_cleaning', 'kitchen_utensils', 'cooking'],
     phone: '+919876543210',
     lat: 19.0772,
@@ -92,8 +93,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Mary D.',
     photoUri: PORTRAITS.m2,
     gender: 'female',
+    age: 29,
     distanceLabel: '—',
-    rates: { m30: 180, h1: 320, h2: 550 },
+    rates: { m30: 180, h1: 320, h2: 550, h24: 4600 },
     services: ['cloth_cleaning', 'house_cleaning', 'other'],
     phone: '+919811122233',
     lat: 19.0755,
@@ -111,8 +113,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Priya S.',
     photoUri: PORTRAITS.m3,
     gender: 'female',
+    age: 31,
     distanceLabel: '—',
-    rates: { m30: 220, h1: 400, h2: 700 },
+    rates: { m30: 220, h1: 400, h2: 700, h24: 6000 },
     services: ['cooking', 'house_cleaning'],
     phone: '+919955501234',
     lat: 19.0768,
@@ -131,8 +134,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Geeta R.',
     photoUri: PORTRAITS.m4,
     gender: 'female',
+    age: 42,
     distanceLabel: '—',
-    rates: { m30: 150, h1: 280, h2: 480 },
+    rates: { m30: 150, h1: 280, h2: 480, h24: 4200 },
     services: baseServices,
     phone: '+919900011122',
     lat: 19.0748,
@@ -150,8 +154,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Joseph P.',
     photoUri: PORTRAITS.m5,
     gender: 'male',
+    age: 37,
     distanceLabel: '—',
-    rates: { m30: 210, h1: 380, h2: 650 },
+    rates: { m30: 210, h1: 380, h2: 650, h24: 5500 },
     services: ['house_cleaning', 'other', 'kitchen_utensils'],
     phone: '+919988776655',
     lat: 19.0775,
@@ -168,8 +173,9 @@ export const MOCK_MAIDS: PublicMaid[] = [
     displayName: 'Lakshmi T.',
     photoUri: PORTRAITS.m6,
     gender: 'female',
+    age: 33,
     distanceLabel: '—',
-    rates: { m30: 190, h1: 340, h2: 580 },
+    rates: { m30: 190, h1: 340, h2: 580, h24: 5000 },
     services: ['cooking', 'kitchen_utensils', 'cloth_cleaning'],
     phone: '+919922334455',
     lat: 19.075,
@@ -238,20 +244,45 @@ function hasFinitePair(lat: unknown, lng: unknown): boolean {
   );
 }
 
+/** Backfill 24h listing rate from shorter slots when missing or invalid. */
+export function normalizeMaidOwnProfile(m: MaidOwnProfile): MaidOwnProfile {
+  const m30 = Number(m.rates.m30);
+  const h1 = Number(m.rates.h1);
+  const h2 = Number(m.rates.h2);
+  let h24 = Number(m.rates.h24);
+  if (!Number.isFinite(h24) || h24 <= 0) {
+    const h2v = Number.isFinite(h2) && h2 > 0 ? h2 : 0;
+    const h1v = Number.isFinite(h1) && h1 > 0 ? h1 : 0;
+    h24 = Math.max(Math.round(h2v * 8), Math.round(h1v * 12), 1);
+  }
+  return {
+    ...m,
+    rates: {
+      m30: Number.isFinite(m30) && m30 > 0 ? m30 : 200,
+      h1: Number.isFinite(h1) && h1 > 0 ? h1 : 350,
+      h2: Number.isFinite(h2) && h2 > 0 ? h2 : 600,
+      h24: Math.round(h24),
+    },
+  };
+}
+
 /** Publish a completed helper setup into the in-app discovery feed (AsyncStorage-backed; no server yet). */
 export function maidOwnProfileToPublic(m: MaidOwnProfile): PublicMaid {
-  const hasLoc = hasFinitePair(m.locationLat, m.locationLng);
+  const profile = normalizeMaidOwnProfile(m);
+  const hasLoc = hasFinitePair(profile.locationLat, profile.locationLng);
+  const { m30, h1, h2, h24 } = profile.rates;
   return {
-    id: m.id,
-    displayName: m.displayName,
-    photoUri: m.photoUri,
-    gender: m.gender,
+    id: profile.id,
+    displayName: profile.displayName,
+    photoUri: profile.photoUri,
+    gender: profile.gender,
+    age: profile.age,
     distanceLabel: '—',
-    rates: m.rates,
-    services: m.services,
-    phone: m.phone,
-    lat: hasLoc ? m.locationLat! : null,
-    lng: hasLoc ? m.locationLng! : null,
+    rates: { m30, h1, h2, h24 },
+    services: profile.services,
+    phone: profile.phone,
+    lat: hasLoc ? profile.locationLat! : null,
+    lng: hasLoc ? profile.locationLng! : null,
     ratingAvg: 0,
     reviewCount: 0,
     reviews: [],

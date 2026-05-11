@@ -1,10 +1,27 @@
-import React, { useState } from 'react';
-import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { APP_DISPLAY_NAME } from '../constants/branding';
 import { formatPrice } from '../constants/localeDisplay';
+import { API_SYNC_ENABLED } from '../constants/api';
+import { helperProfileImageSource, profilePlaceholderByGender } from '../constants/placeholders';
+import { isDemoMaidId } from '../data/mockMaids';
 import { useApp } from '../context/AppContext';
 import type { UserStackParamList } from '../navigation/types';
 import { SERVICE_LABELS } from '../types';
@@ -18,20 +35,47 @@ function digitsOnly(phone: string) {
 
 export function MaidDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { maid } = route.params;
+  const { maid: maidParam } = route.params;
+  const [maidShown, setMaidShown] = useState(maidParam);
+  useEffect(() => {
+    setMaidShown(maidParam);
+  }, [maidParam]);
+
   const {
     canContactMaid,
     maidCanReceiveContact,
     registerContact,
     isUserPremium,
     purchaseUserPremium,
+    getContactsForMaid,
+    submitContactReview,
     FREE_CONTACTS_TOTAL,
     state,
   } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [ratingDraft, setRatingDraft] = useState(5);
+  const [reviewDraft, setReviewDraft] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
+  const maidContactsForReview = getContactsForMaid(maidShown.id);
+  const userReviewsFromDevice = maidContactsForReview
+    .filter((e) => e.userRating != null)
+    .map((e) => ({
+      id: `local_${e.id}`,
+      author: state.displayName || 'You',
+      rating: e.userRating ?? 5,
+      comment: e.userReview?.trim() || 'No comment added.',
+      authorPhotoUri: state.userProfile?.photoUri ?? null,
+    }));
+  /** Online: server holds public reviews. Offline/demo: merge device-only reviews with listing. */
+  const allReviews =
+    API_SYNC_ENABLED && !isDemoMaidId(maidShown.id)
+      ? maidShown.reviews
+      : [...userReviewsFromDevice, ...maidShown.reviews];
+  /** Most recent contact without a saved star rating (handles multiple premium touches). */
+  const pendingContact = [...maidContactsForReview].reverse().find((e) => e.userRating == null);
 
   const tryContact = () => {
-    if (!maidCanReceiveContact(maid.id)) {
+    if (!maidCanReceiveContact(maidShown.id)) {
       Alert.alert(
         'Helper unavailable',
         'This helper has reached their free lead limit for this month. Try another helper, or they can upgrade to Maid Pro in the app.',
@@ -53,56 +97,70 @@ export function MaidDetailScreen({ route, navigation }: Props) {
       );
       return;
     }
-    const ok = registerContact(maid.id);
+    const ok = registerContact(maidShown.id);
     if (ok) setSheetOpen(true);
   };
 
   const call = () => {
-    const n = digitsOnly(maid.phone);
+    const n = digitsOnly(maidShown.phone);
     Linking.openURL(`tel:${n}`);
   };
 
   const whatsapp = () => {
-    const n = digitsOnly(maid.phone);
+    const n = digitsOnly(maidShown.phone);
     Linking.openURL(`https://wa.me/${n}`);
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(0, insets.top - 8) : 0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      >
         <View style={styles.hero}>
-          {maid.photoUri ? (
-            <Image source={{ uri: maid.photoUri }} style={styles.photo} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Text style={styles.photoLetter}>{maid.displayName.charAt(0)}</Text>
-            </View>
-          )}
-          <Text style={styles.name}>{maid.displayName}</Text>
+          <Image
+            source={helperProfileImageSource(maidShown.photoUri, maidShown.gender)}
+            style={styles.photo}
+          />
+          <Text style={styles.name}>{maidShown.displayName}</Text>
           <Text style={styles.meta}>
-            {maid.gender === 'male' ? 'Male' : 'Female'} · {maid.distanceLabel}
-            {maid.reviewCount === 0
+            {maidShown.gender === 'male' ? 'Male' : 'Female'} · {maidShown.age} yrs ·{' '}
+            {maidShown.distanceLabel}
+            {maidShown.reviewCount === 0
               ? ` · New on ${APP_DISPLAY_NAME}`
-              : ` · ★ ${maid.ratingAvg.toFixed(1)} · ${maid.reviewCount} reviews`}
+              : ` · ★ ${maidShown.ratingAvg.toFixed(1)} · ${maidShown.reviewCount} reviews`}
           </Text>
         </View>
 
         <Text style={styles.section}>Rates</Text>
         <View style={styles.rateTiles}>
-          <View style={styles.rateTile}>
+          <View style={[styles.rateTile, styles.rateTileCell]}>
             <Text style={styles.rateTileTitle}>1 hour</Text>
-            <Text style={styles.rateTilePrice}>{formatPrice(maid.rates.h1)}</Text>
+            <Text style={styles.rateTilePrice}>{formatPrice(maidShown.rates.h1, state.pricingCountry)}</Text>
             <Text style={styles.rateTileOff}>Listed rate</Text>
           </View>
-          <View style={styles.rateTile}>
+          <View style={[styles.rateTile, styles.rateTileCell]}>
             <Text style={styles.rateTileTitle}>1.5 hours</Text>
-            <Text style={styles.rateTilePrice}>{formatPrice(Math.round(maid.rates.h1 * 1.5))}</Text>
+            <Text style={styles.rateTilePrice}>
+              {formatPrice(Math.round(maidShown.rates.h1 * 1.5), state.pricingCountry)}
+            </Text>
             <Text style={styles.rateTileOff}>Best value</Text>
           </View>
-          <View style={styles.rateTile}>
+          <View style={[styles.rateTile, styles.rateTileCell]}>
             <Text style={styles.rateTileTitle}>2 hours</Text>
-            <Text style={styles.rateTilePrice}>{formatPrice(maid.rates.h2)}</Text>
+            <Text style={styles.rateTilePrice}>{formatPrice(maidShown.rates.h2, state.pricingCountry)}</Text>
             <Text style={styles.rateTileOff}>Pack discount</Text>
+          </View>
+          <View style={[styles.rateTile, styles.rateTileCell]}>
+            <Text style={styles.rateTileTitle}>24 hours</Text>
+            <Text style={styles.rateTilePrice}>{formatPrice(maidShown.rates.h24, state.pricingCountry)}</Text>
+            <Text style={styles.rateTileOff}>Full day</Text>
           </View>
         </View>
 
@@ -122,7 +180,7 @@ export function MaidDetailScreen({ route, navigation }: Props) {
 
         <Text style={styles.section}>Services</Text>
         <View style={styles.chips}>
-          {maid.services.map((s) => (
+          {maidShown.services.map((s) => (
             <View key={s} style={styles.chip}>
               <Text style={styles.chipText}>{SERVICE_LABELS[s]}</Text>
             </View>
@@ -130,15 +188,81 @@ export function MaidDetailScreen({ route, navigation }: Props) {
         </View>
 
         <Text style={styles.section}>Reviews</Text>
-        {maid.reviews.length === 0 ? (
+        {pendingContact ? (
+          <View style={styles.reviewComposer}>
+            <Text style={styles.reviewComposerTitle}>Rate this helper</Text>
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Pressable
+                  key={star}
+                  onPress={() => setRatingDraft(star)}
+                  style={styles.starTap}
+                  accessibilityLabel={`Give ${star} star`}
+                >
+                  <Ionicons
+                    name={star <= ratingDraft ? 'star' : 'star-outline'}
+                    size={24}
+                    color={colors.accentDark}
+                  />
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              value={reviewDraft}
+              onChangeText={setReviewDraft}
+              style={styles.reviewInput}
+              placeholder="Write your review"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+            />
+            <Pressable
+              style={[styles.addReviewBtn, savingReview && { opacity: 0.6 }]}
+              disabled={savingReview}
+              onPress={() => {
+                void (async () => {
+                  if (savingReview) return;
+                  setSavingReview(true);
+                  try {
+                    const updated = await submitContactReview(
+                      pendingContact.id,
+                      maidShown.id,
+                      ratingDraft,
+                      reviewDraft
+                    );
+                    if (updated) setMaidShown(updated);
+                    setReviewDraft('');
+                    setRatingDraft(5);
+                    Alert.alert(
+                      'Thanks!',
+                      updated
+                        ? 'Your star rating and review are visible to other families browsing this helper.'
+                        : API_SYNC_ENABLED && !isDemoMaidId(maidShown.id)
+                          ? 'Saved on this device. Publishing to other families will work when the connection and sign-in are OK — try again later.'
+                          : 'Your rating and review are saved on this device.'
+                    );
+                  } finally {
+                    setSavingReview(false);
+                  }
+                })();
+              }}
+            >
+              <Text style={styles.addReviewBtnText}>
+                {savingReview ? 'Saving…' : 'Save review'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {allReviews.length === 0 && !pendingContact ? (
           <View style={styles.reviewsEmpty}>
             <Text style={styles.empty}>No reviews yet</Text>
             <Text style={styles.emptySub}>
               This helper may be new in your area. Always confirm skills and references in person.
             </Text>
           </View>
+        ) : allReviews.length === 0 && pendingContact ? (
+          <Text style={styles.reviewComposeHint}>Add your rating above — reviews from other families appear here.</Text>
         ) : (
-          maid.reviews.map((r) => (
+          allReviews.map((r) => (
             <View key={r.id} style={styles.review}>
               <View style={styles.reviewTop}>
                 {r.authorPhotoUri ? (
@@ -191,12 +315,22 @@ export function MaidDetailScreen({ route, navigation }: Props) {
       <Modal visible={sheetOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Contact {maid.displayName}</Text>
+            <Text style={styles.sheetTitle}>Contact {maidShown.displayName}</Text>
             <Text style={styles.sheetSub}>
               No booking here — call or message directly. Stay safe and agree timing & pay offline.
             </Text>
             <PrimaryButton title="Call" onPress={call} style={styles.sheetBtn} />
             <PrimaryButton title="WhatsApp" variant="secondary" onPress={whatsapp} />
+            {pendingContact && (
+              <Pressable
+                style={styles.quickReviewBtn}
+                onPress={() => {
+                  setSheetOpen(false);
+                }}
+              >
+                <Text style={styles.quickReviewBtnText}>Done viewing contact - add rating below</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => setSheetOpen(false)}
               style={styles.close}
@@ -213,13 +347,13 @@ export function MaidDetailScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.lg, paddingBottom: 120 },
+  scroll: { padding: spacing.lg, paddingBottom: 200 },
   hero: { alignItems: 'center', marginBottom: spacing.lg },
   photo: {
     width: 120,
@@ -268,10 +402,15 @@ const styles = StyleSheet.create({
   rateVal: { ...typography.bodyMedium, color: colors.text },
   rateTiles: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
+  rateTileCell: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minWidth: 140,
+  },
   rateTile: {
-    flex: 1,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -361,6 +500,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     lineHeight: 18,
   },
+  reviewComposeHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    lineHeight: 20,
+  },
   review: {
     marginBottom: spacing.md,
     padding: spacing.md,
@@ -402,6 +547,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   reviewBody: { ...typography.caption, color: colors.textSecondary, lineHeight: 20 },
+  reviewComposer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  reviewComposerTitle: {
+    ...typography.bodyMedium,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  starTap: {
+    padding: 2,
+  },
+  addReviewBtn: {
+    backgroundColor: colors.primaryMuted,
+    borderWidth: 1,
+    borderColor: colors.primaryDark,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    backgroundColor: colors.background,
+    minHeight: 72,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    color: colors.text,
+    textAlignVertical: 'top',
+  },
+  addReviewBtnText: {
+    ...typography.small,
+    color: colors.primaryDark,
+    fontWeight: '700',
+  },
   disclaimer: {
     ...typography.caption,
     color: colors.warning,
@@ -446,6 +638,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   sheetBtn: { marginBottom: spacing.sm },
+  quickReviewBtn: {
+    marginTop: spacing.sm,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  quickReviewBtnText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+  },
   close: { alignItems: 'center', marginTop: spacing.md },
   closeText: { ...typography.caption, color: colors.primaryDark },
   mini: { marginTop: spacing.sm, alignItems: 'center' },
